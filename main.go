@@ -39,8 +39,8 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-
-	podsClient := clientset.CoreV1().Pods(apiv1.NamespaceDefault)
+	podNamespace := apiv1.NamespaceDefault
+	podsClient := clientset.CoreV1().Pods(podNamespace)
 
 	ssh.Handle(func(s ssh.Session) {
 		//io.WriteString(s, "Hello world\n")
@@ -58,32 +58,54 @@ func main() {
 		io.WriteString(s, "Hi "+s.User()+"! This is your fingerprint: "+userKeyFingerprint+"\n") // Sarebbe bello aggiungere un punto al secondo finché il deployment non è completo
 		podName := "sshbox-" + s.User() + "-" + userKeyFingerprint
 
-		pod := &apiv1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   podName,
-				Labels: map[string]string{"app": "sshbox"},
-			},
-			Spec: apiv1.PodSpec{
-				Containers: []apiv1.Container{
-					{
-						Name:  "sshbox",
-						Image: "alpine",
-						TTY:   true,
+		//podList, err := podsClient.List(context.TODO(), metav1.ListOptions{})
+
+		gotPod, err := podsClient.Get(context.TODO(), podName, metav1.GetOptions{})
+		podFound := true
+		if err != nil {
+			errStr := err.Error()
+			//this is horrible
+			if errStr[len(errStr)-10:] == " not found" {
+				podFound = false
+			} else {
+				io.WriteString(s, fmt.Sprint(err, gotPod, "Error occurred while searching for the pod: "+err.Error()))
+				return
+			}
+		}
+		//io.WriteString(s, string(gotPod.Status.Phase)+" - "+gotPod.Status.String()+" - ")
+
+		//Container may be terminating but it would drop in a shell anyway :c
+
+		if !podFound {
+			pod := &apiv1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   podName,
+					Labels: map[string]string{"app": "sshbox"},
+				},
+				Spec: apiv1.PodSpec{
+					Containers: []apiv1.Container{
+						{
+							Name:  "sshbox",
+							Image: "alpine",
+							TTY:   true,
+						},
 					},
 				},
-			},
+			}
+
+			// Create Deployment
+			io.WriteString(s, "Creating pod...\n")
+			_, err := podsClient.Create(context.TODO(), pod, metav1.CreateOptions{})
+			if err != nil {
+				io.WriteString(s, "Error occurred during pod creation: "+err.Error())
+				return
+			}
+			// Remove the wait time
+			time.Sleep(2 * time.Second)
+			io.WriteString(s, "Pod created! Redirecting...\n")
 		}
 
-		// Create Deployment
-		io.WriteString(s, "Creating deployment...\n")
-		result, err := podsClient.Create(context.TODO(), pod, metav1.CreateOptions{})
-		if err != nil {
-			panic(err)
-		}
-		time.Sleep(2 * time.Second)
-		io.WriteString(s, "Deployment created! Redirecting...\n")
-
-		req := clientset.CoreV1().RESTClient().Post().Resource("pods").Name(result.Name).Namespace(result.Namespace).SubResource("exec")
+		req := clientset.CoreV1().RESTClient().Post().Resource("pods").Name(podName).Namespace(podNamespace).SubResource("exec")
 		req.VersionedParams(&apiv1.PodExecOptions{
 			TypeMeta:  metav1.TypeMeta{},
 			Stdin:     true,
@@ -96,7 +118,8 @@ func main() {
 
 		exec, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
 		if err != nil {
-			panic(err)
+			io.WriteString(s, fmt.Sprint("Error during the command executer", err))
+			return
 		}
 
 		err = exec.Stream(remotecommand.StreamOptions{
@@ -107,14 +130,16 @@ func main() {
 
 		if err != nil {
 			io.WriteString(s, err.Error()+"\n")
+			return
 		}
 
 		io.WriteString(s, "Quitted!\n")
 
 		//defer deployment deletion
 		defer func() {
-			podsClient.Delete(context.TODO(), pod.GetObjectMeta().GetName(), metav1.DeleteOptions{})
-			fmt.Println("Deleting ", pod.GetObjectMeta().GetName())
+			var i int64 = 0
+			podsClient.Delete(context.TODO(), podName, metav1.DeleteOptions{GracePeriodSeconds: &i})
+			fmt.Println("Deleting ", podName)
 		}()
 	})
 
