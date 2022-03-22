@@ -13,6 +13,7 @@ import (
 
 	"github.com/gliderlabs/ssh"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -46,6 +47,31 @@ func main() {
 		//io.WriteString(s, "Hello world\n")
 		defer s.Close()
 
+		if !(s.User()[:6] == "unipi-") {
+			io.WriteString(s, `Pandry says I shouldn't talk to strangers, but here's a nice pizza recipie:
+Flour 200g (possibly with 14g of proteins per 100g)
+Water 300ml 
+Salt  10g 
+Yeast 4g 
+Extravirgin Oil 80g (NOT ur nut!!)
+
+Mix all togheder (salt ad the end!)
+Let it rest for 20 mins; then fold it every 30 or so minutes per 3 times, then wait a couple of hours; Do little 300g dough balls and fold them; roll the dough after ~2 hours and let it rest for 1 hour; Bake @ max @ ~ 20 mins
+Enjoy!
+
+And here a good song list: 
+https://www.youtube.com/watch?v=55OJ17cHeJA
+https://www.youtube.com/watch?v=-UkSdSlY1YA
+https://www.youtube.com/watch?v=xHE5g9YgkFg
+https://www.youtube.com/watch?v=vBZ5SLJmfdw
+https://www.youtube.com/watch?v=OO4ib5xC7Fk
+https://www.youtube.com/watch?v=1uB2ZRjbtbY
+
+Have a good day! :)
+`)
+			return
+		}
+
 		hash := sha1.New()
 		pk := s.PublicKey().Marshal()
 		_, err := hash.Write(pk)
@@ -56,6 +82,7 @@ func main() {
 		// 		check it's not in terminating state/ is in running state
 		userKeyFingerprint := hex.EncodeToString(hash.Sum(nil))
 		io.WriteString(s, "Hi "+s.User()+"! This is your fingerprint: "+userKeyFingerprint+"\n") // Sarebbe bello aggiungere un punto al secondo finché il deployment non è completo
+		fmt.Println("Connesso utente '", s.User(), "' dall'IP ", s.RemoteAddr())
 		podName := "sshbox-" + s.User() + "-" + userKeyFingerprint
 
 		//podList, err := podsClient.List(context.TODO(), metav1.ListOptions{})
@@ -75,8 +102,9 @@ func main() {
 		//io.WriteString(s, string(gotPod.Status.Phase)+" - "+gotPod.Status.String()+" - ")
 
 		//Container may be terminating but it would drop in a shell anyway :c
-
+		trueBool := true
 		if !podFound {
+			err = nil
 			pod := &apiv1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   podName,
@@ -86,23 +114,63 @@ func main() {
 					Containers: []apiv1.Container{
 						{
 							Name:  "sshbox",
-							Image: "alpine",
-							TTY:   true,
+							Image: "pandry/ubuntubox",
+							//TTY:   true,
+							Resources: apiv1.ResourceRequirements{
+								Limits: apiv1.ResourceList{
+									apiv1.ResourceCPU: *resource.NewQuantity(1, resource.BinarySI),
+									"memory":          *resource.NewQuantity(200000000, resource.BinarySI),
+								},
+							},
+							Command: []string{"sleep", "infinity"},
+							//Args: []string{"zsh"},
+							//Args: []string{"zsh"},
 						},
 					},
+					Hostname:          "sshbox",
+					SetHostnameAsFQDN: &trueBool,
 				},
 			}
 
 			// Create Deployment
-			io.WriteString(s, "Creating pod...\n")
+			io.WriteString(s, "Creating pod..")
 			_, err := podsClient.Create(context.TODO(), pod, metav1.CreateOptions{})
 			if err != nil {
 				io.WriteString(s, "Error occurred during pod creation: "+err.Error())
+				fmt.Print(pod)
 				return
 			}
+			//defer deployment deletion
+			defer func() {
+				var i int64 = 0
+				podsClient.Delete(context.TODO(), podName, metav1.DeleteOptions{GracePeriodSeconds: &i})
+				fmt.Println("Deleting ", podName)
+			}()
+
 			// Remove the wait time
-			time.Sleep(2 * time.Second)
-			io.WriteString(s, "Pod created! Redirecting...\n")
+			podReady := false
+			for !podReady {
+				gotPod, err := podsClient.Get(context.TODO(), podName, metav1.GetOptions{})
+				if err != nil {
+					errStr := err.Error()
+					switch {
+					case errStr[len(errStr)-10:] == " not found":
+						io.WriteString(s, "\nSi è verificato un errore, il pod non è stato creato! contatta pandry!")
+					default:
+						io.WriteString(s, "\nSi è verificato un errore: "+err.Error())
+					}
+				}
+				switch gotPod.Status.Phase {
+				case "Pending":
+					io.WriteString(s, ".")
+				case "Running":
+					io.WriteString(s, "\nYay! Servert creato! Inizializzo il wormhole...\nFatto!\nBenvenuto su Linux!\n")
+					podReady = true
+				default:
+					io.WriteString(s, "Uhm, scrivi questo a Pandry: "+string(gotPod.Status.Phase))
+				}
+				time.Sleep(1 * time.Second)
+			}
 		}
 
 		req := clientset.CoreV1().RESTClient().Post().Resource("pods").Name(podName).Namespace(podNamespace).SubResource("exec")
@@ -113,7 +181,7 @@ func main() {
 			Stderr:    true,
 			TTY:       true,
 			Container: "sshbox",
-			Command:   []string{"sh"},
+			Command:   []string{"zsh"},
 		}, scheme.ParameterCodec)
 
 		exec, err := remotecommand.NewSPDYExecutor(config, "POST", req.URL())
@@ -135,12 +203,6 @@ func main() {
 
 		io.WriteString(s, "Quitted!\n")
 
-		//defer deployment deletion
-		defer func() {
-			var i int64 = 0
-			podsClient.Delete(context.TODO(), podName, metav1.DeleteOptions{GracePeriodSeconds: &i})
-			fmt.Println("Deleting ", podName)
-		}()
 	})
 
 	publicKeyOption := ssh.PublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
