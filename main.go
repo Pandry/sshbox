@@ -221,7 +221,7 @@ Have a good day! :)
 		return true // allow all keys, or use ssh.KeysEqual() to compare against known keys
 	})
 	if fs, err := os.Stat(".id_server"); err != nil || fs.IsDir() {
-		if fs.IsDir() {
+		if err == nil && fs.IsDir() {
 			panic("ssh key is a folder")
 		}
 		makeSSHKeyPair(".id_server.pub", ".id_server")
