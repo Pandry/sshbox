@@ -2,14 +2,22 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"crypto/sha1"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
+	"os"
 	"path/filepath"
 	"time"
+
+	sshp "golang.org/x/crypto/ssh"
 
 	"github.com/gliderlabs/ssh"
 	apiv1 "k8s.io/api/core/v1"
@@ -208,7 +216,33 @@ Have a good day! :)
 	publicKeyOption := ssh.PublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
 		return true // allow all keys, or use ssh.KeysEqual() to compare against known keys
 	})
+	makeSSHKeyPair(".id_server.pub", ".id_server")
+	log.Fatal(ssh.ListenAndServe(":22", nil, publicKeyOption, ssh.HostKeyFile(".id_server")))
 
-	log.Fatal(ssh.ListenAndServe(":2222", nil, publicKeyOption))
+}
 
+//https://stackoverflow.com/a/34347463
+func makeSSHKeyPair(pubKeyPath, privateKeyPath string) error {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 4096)
+	if err != nil {
+		return err
+	}
+
+	// generate and write private key as PEM
+	privateKeyFile, err := os.Create(privateKeyPath)
+	if err != nil {
+		return err
+	}
+	defer privateKeyFile.Close()
+	privateKeyPEM := &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(privateKey)}
+	if err := pem.Encode(privateKeyFile, privateKeyPEM); err != nil {
+		return err
+	}
+
+	// generate and write public key
+	pub, err := sshp.NewPublicKey(&privateKey.PublicKey)
+	if err != nil {
+		return err
+	}
+	return ioutil.WriteFile(pubKeyPath, sshp.MarshalAuthorizedKey(pub), 0655)
 }
