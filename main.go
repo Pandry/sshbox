@@ -126,8 +126,12 @@ Have a good day! :)
 							//TTY:   true,
 							Resources: apiv1.ResourceRequirements{
 								Limits: apiv1.ResourceList{
-									apiv1.ResourceCPU: *resource.NewQuantity(1, resource.BinarySI),
+									apiv1.ResourceCPU: *resource.NewMilliQuantity(300, resource.BinarySI),
 									"memory":          *resource.NewQuantity(200000000, resource.BinarySI),
+								},
+								Requests: apiv1.ResourceList{
+									apiv1.ResourceCPU: *resource.NewMilliQuantity(10, resource.BinarySI),
+									"memory":          *resource.NewQuantity(50000000, resource.BinarySI),
 								},
 							},
 							Command: []string{"sleep", "infinity"},
@@ -172,7 +176,7 @@ Have a good day! :)
 				case "Pending":
 					io.WriteString(s, ".")
 				case "Running":
-					io.WriteString(s, "\nYay! Servert creato! Inizializzo il wormhole...\nFatto!\nBenvenuto su Linux!\n")
+					io.WriteString(s, "\nYay! Servert creato!\nBenvenuto su Linux!\n")
 					podReady = true
 				default:
 					io.WriteString(s, "Uhm, scrivi questo a Pandry: "+string(gotPod.Status.Phase))
