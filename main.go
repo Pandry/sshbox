@@ -111,6 +111,7 @@ Have a good day! :)
 
 		//Container may be terminating but it would drop in a shell anyway :c
 		trueBool := true
+		runtimeClass := "gvisor"
 		if !podFound {
 			err = nil
 			pod := &apiv1.Pod{
@@ -119,6 +120,7 @@ Have a good day! :)
 					Labels: map[string]string{"app": "sshbox"},
 				},
 				Spec: apiv1.PodSpec{
+					RuntimeClassName: &runtimeClass,
 					Containers: []apiv1.Container{
 						{
 							Name:  "sshbox",
@@ -135,8 +137,6 @@ Have a good day! :)
 								},
 							},
 							Command: []string{"sleep", "infinity"},
-							//Args: []string{"zsh"},
-							//Args: []string{"zsh"},
 						},
 					},
 					Hostname:          "sshbox",
