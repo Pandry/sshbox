@@ -55,7 +55,7 @@ func main() {
 		//io.WriteString(s, "Hello world\n")
 		defer s.Close()
 
-		if !(s.User()[:6] == "unipi-") {
+		if len(s.User()) < 7 || !(s.User()[:6] == "unipi-") {
 			io.WriteString(s, `Pandry says I shouldn't talk to strangers, but here's a nice pizza recipie:
 Flour 200g (possibly with 14g of proteins per 100g)
 Water 300ml 
@@ -100,7 +100,7 @@ Have a good day! :)
 		if err != nil {
 			errStr := err.Error()
 			//this is horrible
-			if errStr[len(errStr)-10:] == " not found" {
+			if len(errStr) > 10 && errStr[len(errStr)-10:] == " not found" {
 				podFound = false
 			} else {
 				io.WriteString(s, fmt.Sprint(err, gotPod, "Error occurred while searching for the pod: "+err.Error()))
