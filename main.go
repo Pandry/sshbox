@@ -220,7 +220,13 @@ Have a good day! :)
 	publicKeyOption := ssh.PublicKeyAuth(func(ctx ssh.Context, key ssh.PublicKey) bool {
 		return true // allow all keys, or use ssh.KeysEqual() to compare against known keys
 	})
-	makeSSHKeyPair(".id_server.pub", ".id_server")
+	if fs, err := os.Stat(".id_server"); err != nil || fs.IsDir() {
+		if fs.IsDir() {
+			panic("ssh key is a folder")
+		}
+		makeSSHKeyPair(".id_server.pub", ".id_server")
+	}
+
 	log.Fatal(ssh.ListenAndServe(":22", nil, publicKeyOption, ssh.HostKeyFile(".id_server")))
 
 }
