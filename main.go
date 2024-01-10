@@ -176,7 +176,7 @@ Have a good day! :)
 				case "Pending":
 					io.WriteString(s, ".")
 				case "Running":
-					io.WriteString(s, "\nYay! Servert creato!\nBenvenuto su Linux!\n")
+					io.WriteString(s, "\nYay! Servert creato!\nBenvenuto su Linux! (se non vedi una shell dagli un attimo; al limite prova a premere invio un paio di volte)\n")
 					podReady = true
 				default:
 					io.WriteString(s, "Uhm, scrivi questo a Pandry: "+string(gotPod.Status.Phase))
